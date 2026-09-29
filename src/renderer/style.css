@@ -51,3 +51,9 @@ summary { cursor: pointer; font-weight: 500; }
 .settings label { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
 .settings input[type="number"] { width: 64px; }
 .settings .check { justify-content: flex-start; }
+
+.eq-title { margin-top: 16px; }
+.eq { display: block; width: 100%; height: 190px; border-radius: 8px; cursor: ns-resize; touch-action: none; }
+.eq:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.eq-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; }
+.readout { color: var(--muted); font-variant-numeric: tabular-nums; }

@@ -9,7 +9,8 @@ Inspired by [Tomighty](https://github.com/tomighty/tomighty) (timer) and
 ## Features
 
 - Pomodoro / short break / long break cycle. Durations are configurable, and a long break comes every N pomodoros.
-- White, pink, brown, blue and violet noise, generated live with Web Audio (no audio files).
+- Noise generated live with Web Audio (no audio files). The sound is defined by a **curve**: drag ten coloured points (31 Hz to 16 kHz, ±30 dB) to shape it. White, pink, brown, blue and violet are presets of that curve.
+- Live spectrum: the measured spectrum of what is actually playing, drawn over the curve.
 - Menubar item (macOS app only) showing the countdown, with a menu to start, pause, skip, reset and control the noise.
 - System notifications when a phase starts or ends.
 - Option to play noise only while focusing.
@@ -17,9 +18,9 @@ Inspired by [Tomighty](https://github.com/tomighty/tomighty) (timer) and
 
 ## Next features
 
-1. **Visualiser**: a live display of the noise, shown in the page, and in the menubar item when it is clicked.
-2. **Noise curve**: draw the spectrum (level per frequency) of the noise that is actually playing, so the differences between white, pink, brown, blue and violet can be seen.
-3. **Fade-out setting**: a setting that starts fading the noise away when X seconds are left in the current pomodoro.
+1. **Menubar visualiser**: show the curve and live spectrum when the menubar item is clicked. Native macOS menus cannot draw a canvas, so this means opening a small popover window under the icon and streaming the spectrum to it.
+2. **Fade-out setting**: start fading the noise away when X seconds are left in the current pomodoro.
+3. Possible follow-ups: free-hand curve drawing, saving named custom curves.
 
 ## Two ways to run it, one codebase
 
@@ -48,7 +49,10 @@ flowchart LR
 src/
   renderer/           the app itself (shared by both versions)
     timer.js          pure pomodoro state machine (injected clock, unit-tested)
-    noise.js          noise generators (pure) + Web Audio player
+    eq.js             the noise curve: presets, biquad maths, filter solver (pure, unit-tested)
+    spectrum.js       FFT bins -> smoothed log-frequency curve (pure, unit-tested)
+    noise.js          white-noise generator (pure) + Web Audio player (filter chain, analyser)
+    eq-editor.js      canvas widget: draggable curve points + live spectrum overlay
     app.js            UI wiring, saved preferences, noise policy, host bridge
     index.html, style.css
   main/               Electron only
@@ -159,7 +163,33 @@ sequenceDiagram
 Details worth knowing:
 - The window is created with `backgroundThrottling: false` and Electron is started with `autoplay-policy=no-user-gesture-required`, so the timer keeps ticking and noise can start from the menubar while the window is hidden and nothing has been clicked.
 - The timer stores an end timestamp and recomputes remaining time on every tick, so a delayed tick never makes it drift.
-- Noise is generated in JavaScript into a 12-second stereo buffer per colour (equal-power crossfaded so the loop has no click, loudness-matched between colours) and looped.
+- The noise source is one 12-second stereo white-noise buffer (equal-power crossfaded so the loop has no click), looped. See "How the noise works" below.
+
+## How the noise works
+
+Every colour of noise is white noise with a different **spectral slope**: pink falls 3 dB per octave, brown 6, blue rises 3, violet 6. So the app generates white noise once and shapes it with an EQ curve; the presets are just curves.
+
+```mermaid
+flowchart LR
+    W["White noise<br/>12 s loop"] --> F["10 peaking filters<br/>31 Hz … 16 kHz"]
+    F --> C["Loudness<br/>compensation"]
+    C --> A["Analyser<br/>(FFT)"]
+    A --> V["Volume"]
+    V --> L["Limiter"]
+    L --> S(("Speakers"))
+    A -.->|"spectrum, every frame"| Vis["Live spectrum<br/>on the chart"]
+    Curve["Curve<br/>10 dB values"] -->|"solveFilterGains"| F
+    Curve -->|"compensationDb"| C
+```
+
+- **The curve** is ten numbers: the wanted level in dB, relative to white noise, at 31, 62, 125 … 16000 Hz (each −30 to +30). Presets are `slope × octaves` around the middle of the range (`presetCurve` in `eq.js`).
+- **Filters:** one peaking biquad per band. Neighbouring filters overlap, so setting each filter's gain to its own target would overshoot. `solveFilterGains` iterates until the combined response passes through every target point. The chart draws that combined response (computed with the same formulas the browser uses), so the line you see is the sound you get.
+- **Why not shelving filters at the ends?** A shelf holds its gain all the way down to 0 Hz. A steep curve like brown would then put huge amounts of inaudible sub-bass energy in the signal, and the loudness compensation would make the audible part far too quiet. Peaking filters roll off outside the outer bands. The trade-off: on steep curves the line sags slightly between the last two points and rises again beyond 16 kHz.
+- **Smoothness:** the filters are wide (Q 0.8, about 1.7 octaves) so a slope comes out straight. The flip side is that a smooth EQ cannot follow a sharp zig-zag; the handle then sits on the line, not exactly where you dragged.
+- **Loudness compensation:** after the filters a gain is applied so every curve has the same overall loudness as flat white noise. Without it, boosting bands would just make things louder. A limiter guards against clipping.
+- **Live spectrum:** an `AnalyserNode` after the compensation (so the volume slider does not move the picture) is read every frame. `spectrum.js` averages FFT bins over a third of an octave and smooths over time. Absolute FFT levels aren't meaningful, so the measured line is aligned to the curve by average level: you compare shape, not height. It is only drawn while the window is visible.
+
+Measured in Chromium with the real audio graph, the played spectrum follows the target curve of each preset to within about 1 dB (0.2 dB on average) between 50 Hz and 12 kHz.
 
 ## Building and hosting the web app
 
@@ -221,7 +251,13 @@ Limitations compared to the desktop app:
 npm test
 ```
 
-Runs Node's built-in test runner over `test/*.test.js`. It covers the timer (countdown, pause/resume, phase order, long breaks, skip, reset, settings) and the noise generators (range, loudness, loop seam, and the expected dark-to-bright ordering: brown < pink < white < blue < violet). The Electron shell and audio playback are not covered by automated tests.
+Runs Node's built-in test runner over `test/*.test.js`. It covers:
+- the timer (countdown, pause/resume, phase order, long breaks, skip, reset, settings);
+- the white-noise generator (range, loudness, loop seam, flatness);
+- the curve maths (preset slopes, preset matching, the filter solver hitting its target points, straight slopes between points, loudness compensation);
+- spectrum smoothing and alignment.
+
+The Electron shell, the audio graph and the canvas editor are not covered by automated tests; they were checked manually in Chromium.
 
 ## Notes on the tray icon
 

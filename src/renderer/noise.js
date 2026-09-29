@@ -1,71 +1,22 @@
-// Noise generation. generateNoise() is pure (testable in Node); NoisePlayer
-// wraps it in Web Audio for playback.
+// Noise playback. The source is always looped white noise; the "colour" comes
+// from an EQ curve (see eq.js) applied by a chain of biquad filters.
+//
+//   white loop -> 10 peaking filters -> loudness compensation
+//     -> analyser (for the visualiser) -> volume -> limiter -> speakers
 
-export const NOISE_TYPES = ['white', 'pink', 'brown', 'blue', 'violet'];
+import { BAND_FREQS, PEAK_Q, solveFilterGains, compensationDb } from './eq.js';
 
 const TARGET_RMS = 0.2;
 const LOOP_SECONDS = 12;
 const FADE_SECONDS = 1;
+const FFT_SIZE = 8192;
+const SMOOTHING_S = 0.03; // time constant for parameter changes, avoids zipper noise
 
-function rawSamples(type, length, random) {
-  const out = new Float32Array(length);
-  const white = () => random() * 2 - 1;
-  switch (type) {
-    case 'white':
-      for (let i = 0; i < length; i++) out[i] = white();
-      break;
-    case 'pink': {
-      // Paul Kellet's economy filter.
-      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-      for (let i = 0; i < length; i++) {
-        const w = white();
-        b0 = 0.99886 * b0 + w * 0.0555179;
-        b1 = 0.99332 * b1 + w * 0.0750759;
-        b2 = 0.969 * b2 + w * 0.153852;
-        b3 = 0.8665 * b3 + w * 0.3104856;
-        b4 = 0.55 * b4 + w * 0.5329522;
-        b5 = -0.7616 * b5 - w * 0.016898;
-        out[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362;
-        b6 = w * 0.115926;
-      }
-      break;
-    }
-    case 'brown': {
-      let last = 0;
-      for (let i = 0; i < length; i++) {
-        last = (last + 0.02 * white()) / 1.02;
-        out[i] = last;
-      }
-      break;
-    }
-    case 'blue': {
-      let prev = 0;
-      for (let i = 0; i < length; i++) {
-        const w = white();
-        out[i] = w - prev;
-        prev = w;
-      }
-      break;
-    }
-    case 'violet': {
-      let p1 = 0, p2 = 0;
-      for (let i = 0; i < length; i++) {
-        const w = white();
-        out[i] = w - 2 * p1 + p2;
-        p2 = p1;
-        p1 = w;
-      }
-      break;
-    }
-    default:
-      throw new Error(`Unknown noise type: ${type}`);
-  }
-  return out;
-}
-
-// Returns `length` samples that loop seamlessly, normalised to a common loudness.
-export function generateNoise(type, length, { random = Math.random, fade = Math.floor(length / 10) } = {}) {
-  const raw = rawSamples(type, length + fade, random);
+// White noise that loops seamlessly, normalised to a fixed loudness. Pure, so
+// it can be unit-tested in Node.
+export function generateWhiteNoise(length, { random = Math.random, fade = Math.floor(length / 10) } = {}) {
+  const raw = new Float32Array(length + fade);
+  for (let i = 0; i < raw.length; i++) raw[i] = random() * 2 - 1;
   const out = raw.slice(0, length);
   // Equal-power crossfade of the tail into the head hides the loop seam.
   for (let i = 0; i < fade; i++) {
@@ -81,25 +32,28 @@ export function generateNoise(type, length, { random = Math.random, fade = Math.
 
 export class NoisePlayer {
   #ctx = null;
+  #filters = [];
+  #comp = null;
+  #analyser = null;
   #master = null;
   #source = null;
-  #buffers = new Map();
-  #type = 'brown';
+  #buffer = null;
+  #spectrum = null;
+  #target = null; // requested curve, dB per band
   #volume = 0.5;
   #playing = false;
 
   get playing() { return this.#playing; }
-  get type() { return this.#type; }
 
   setVolume(v) {
     this.#volume = Math.min(1, Math.max(0, v));
-    if (this.#master) this.#ramp(this.#master.gain, this.#volume ** 2, 0.05);
+    if (this.#master) this.#ramp(this.#master.gain, this.#volume ** 2);
   }
 
-  setType(type) {
-    if (type === this.#type) return;
-    this.#type = type;
-    if (this.#playing) this.#swapSource();
+  // targetDb: desired level (dB relative to white noise) at each of BAND_FREQS.
+  setCurve(targetDb) {
+    this.#target = targetDb.slice();
+    if (this.#ctx) this.#applyCurve();
   }
 
   async play() {
@@ -107,59 +61,86 @@ export class NoisePlayer {
     this.#playing = true;
     this.#ensureContext();
     await this.#ctx.resume();
+    if (!this.#playing) return; // stopped while resuming
     this.#master.gain.value = 0;
-    this.#swapSource();
-    this.#ramp(this.#master.gain, this.#volume ** 2, 0.3);
+    this.#startSource();
+    this.#ramp(this.#master.gain, this.#volume ** 2, 0.1);
   }
 
   stop() {
     if (!this.#playing) return;
     this.#playing = false;
-    this.#ramp(this.#master.gain, 0, 0.15);
+    this.#ramp(this.#master.gain, 0, 0.05);
     const old = this.#source;
     this.#source = null;
-    setTimeout(() => old?.stop(), 800);
+    setTimeout(() => old?.stop(), 500);
+  }
+
+  // Current output spectrum in dB per FFT bin, or null before audio has started.
+  readSpectrum() {
+    if (!this.#analyser) return null;
+    this.#analyser.getFloatFrequencyData(this.#spectrum);
+    return { db: this.#spectrum, binHz: this.#ctx.sampleRate / FFT_SIZE };
   }
 
   #ensureContext() {
     if (this.#ctx) return;
-    this.#ctx = new AudioContext();
-    this.#master = this.#ctx.createGain();
-    this.#master.connect(this.#ctx.destination);
+    const ctx = (this.#ctx = new AudioContext());
+    this.#filters = BAND_FREQS.map((f) => {
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'peaking';
+      filter.frequency.value = f;
+      filter.Q.value = PEAK_Q;
+      return filter;
+    });
+    this.#comp = ctx.createGain();
+    this.#analyser = ctx.createAnalyser();
+    this.#analyser.fftSize = FFT_SIZE;
+    this.#analyser.smoothingTimeConstant = 0.85;
+    this.#spectrum = new Float32Array(this.#analyser.frequencyBinCount);
+    this.#master = ctx.createGain();
+    const limiter = ctx.createDynamicsCompressor(); // safety net against clipping
+    limiter.threshold.value = -6;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.003;
+
+    [...this.#filters, this.#comp, this.#analyser, this.#master, limiter, ctx.destination].reduce((a, b) => a.connect(b));
+    this.#applyCurve(true);
   }
 
-  #buffer(type) {
-    if (!this.#buffers.has(type)) {
+  #applyCurve(immediate = false) {
+    if (!this.#target) return;
+    const sr = this.#ctx.sampleRate;
+    const gains = solveFilterGains(this.#target, sr);
+    const comp = 10 ** (compensationDb(gains, sr) / 20);
+    const set = (param, v) => (immediate ? (param.value = v) : this.#ramp(param, v));
+    gains.forEach((g, i) => set(this.#filters[i].gain, g));
+    set(this.#comp.gain, comp);
+  }
+
+  #getBuffer() {
+    if (!this.#buffer) {
       const rate = this.#ctx.sampleRate;
       const length = LOOP_SECONDS * rate;
-      const buf = this.#ctx.createBuffer(2, length, rate);
-      const fade = FADE_SECONDS * rate;
-      for (let ch = 0; ch < 2; ch++) buf.copyToChannel(generateNoise(type, length, { fade }), ch);
-      this.#buffers.set(type, buf);
+      this.#buffer = this.#ctx.createBuffer(2, length, rate);
+      for (let ch = 0; ch < 2; ch++) {
+        this.#buffer.copyToChannel(generateWhiteNoise(length, { fade: FADE_SECONDS * rate }), ch);
+      }
     }
-    return this.#buffers.get(type);
+    return this.#buffer;
   }
 
-  // Start a source for the current type, fading it in; the previous one is cut.
-  #swapSource() {
-    const ctx = this.#ctx;
-    const src = ctx.createBufferSource();
-    src.buffer = this.#buffer(this.#type);
-    src.loop = true;
-    const g = ctx.createGain();
-    g.gain.value = 0;
-    src.connect(g).connect(this.#master);
-    src.start();
-    this.#ramp(g.gain, 1, 0.2);
-    const old = this.#source;
-    this.#source = src;
-    if (old) {
-      old.disconnect();
-      old.stop(ctx.currentTime + 0.05);
-    }
+  #startSource() {
+    const node = this.#ctx.createBufferSource();
+    node.buffer = this.#getBuffer();
+    node.loop = true;
+    node.connect(this.#filters[0]);
+    node.start();
+    this.#source = node;
   }
 
-  #ramp(param, value, timeConstant) {
+  #ramp(param, value, timeConstant = SMOOTHING_S) {
     param.setTargetAtTime(value, this.#ctx.currentTime, timeConstant);
   }
 }

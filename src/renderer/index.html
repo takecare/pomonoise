@@ -24,7 +24,7 @@
       <h2>Noise</h2>
       <div class="row">
         <button id="noise-toggle" aria-pressed="false">Off</button>
-        <select id="noise-type" aria-label="Noise type"></select>
+        <select id="noise-type" aria-label="Noise preset"></select>
       </div>
       <label class="row">Volume
         <input id="volume" type="range" min="0" max="1" step="0.01">
@@ -32,6 +32,14 @@
       <label class="check">
         <input id="focus-only" type="checkbox"> Only play while focusing
       </label>
+
+      <h2 class="eq-title">Curve</h2>
+      <canvas id="eq" class="eq" tabindex="0" role="application"
+        aria-label="Noise curve editor. Left and right arrows choose a frequency band, up and down change its level, Home resets it."></canvas>
+      <div class="eq-foot">
+        <span id="eq-readout" class="readout" aria-live="polite">Drag a point to shape the noise</span>
+        <label class="check"><input id="show-spectrum" type="checkbox"> Live spectrum</label>
+      </div>
     </section>
 
     <details class="settings">
