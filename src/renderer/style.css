@@ -1,0 +1,53 @@
+:root {
+  --bg: #fafaf9;
+  --fg: #1c1917;
+  --muted: #78716c;
+  --card: #ffffff;
+  --border: #e7e5e4;
+  --accent: #dc2626;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1c1917; --fg: #fafaf9; --muted: #a8a29e; --card: #292524; --border: #44403c; --accent: #f87171; }
+}
+body[data-phase="short"], body[data-phase="long"] { --accent: #16a34a; }
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+main { max-width: 360px; margin: 0 auto; padding: 20px; display: grid; gap: 16px; }
+section, details {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+
+.timer { text-align: center; }
+.phase { color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; }
+.time { font-size: 64px; font-weight: 200; font-variant-numeric: tabular-nums; margin: 4px 0; }
+.dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 14px; min-height: 10px; }
+.dots i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--accent); }
+.dots i.done { background: var(--accent); }
+.buttons { display: flex; gap: 8px; justify-content: center; }
+
+button, select, input[type="number"] {
+  font: inherit; color: inherit; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px;
+}
+button { cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button.primary, button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.row select, .row input[type="range"] { flex: 1; }
+.check { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+summary { cursor: pointer; font-weight: 500; }
+.settings label { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+.settings input[type="number"] { width: 64px; }
+.settings .check { justify-content: flex-start; }

@@ -1,0 +1,24 @@
+{
+  "name": "pomonoise",
+  "version": "0.1.0",
+  "description": "A pomodoro timer with a built-in noise generator, living in your macOS menubar",
+  "type": "module",
+  "main": "src/main/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "web": "node scripts/serve.mjs",
+    "test": "node --test \"test/*.test.js\"",
+    "dist": "electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.takecare.pomonoise",
+    "productName": "Pomonoise",
+    "files": ["src/**/*", "assets/**/*"],
+    "mac": { "category": "public.app-category.productivity", "extendInfo": { "LSUIElement": false } }
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
