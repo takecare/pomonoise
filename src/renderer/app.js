@@ -2,7 +2,7 @@ import { PomodoroTimer, DEFAULT_SETTINGS, formatTime } from './timer.js';
 import { NoisePlayer } from './noise.js';
 import { PRESET_NAMES, presetCurve, matchPreset, isValidCurve, GRID_FREQS } from './eq.js';
 import { smoothSpectrum } from './spectrum.js';
-import { fadeFactor } from './fade.js';
+import { fadeFactor, fadeInFactor } from './fade.js';
 import { ChimePlayer } from './chime.js';
 import { createEqEditor } from './eq-editor.js';
 
@@ -34,9 +34,9 @@ const prefs = {
   showSpectrum: true,
   chimeOnStart: true, // chime when a focus session starts
   chimeOnEnd: true, // chime when a focus session ends
-  fadeFocus: false, // fade the noise out at the end of a focus session
-  fadeBreak: false, // ... and at the end of a break
-  fadeSeconds: 30, // how long the fade lasts
+  fadeFocus: false, // fade the noise out over the end of a focus session
+  fadeInBreak: false, // silent break; fade the noise in over the end of it
+  fadeSeconds: 30, // how long the fades last
 };
 try {
   Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}'));
@@ -83,19 +83,31 @@ setInterval(() => {
   applyFade(timer.state);
 }, 250);
 
-// ---- fade-out ----------------------------------------------------------------
+// ---- fades ----------------------------------------------------------------------
 
-// Fade the noise over the last `fadeSeconds` of a phase, if enabled for that
-// kind of phase. While paused or idle the level simply holds.
+// Multiplier on the volume slider for the current moment. Focus can fade out over
+// its last `fadeSeconds`; a break can be silent until its last `fadeSeconds` and
+// then fade in. While paused or idle the level simply holds.
+function noiseLevel(state) {
+  const ms = prefs.fadeSeconds * 1000;
+  if (state.phase === 'work') return prefs.fadeFocus ? fadeFactor(state.remainingMs, ms) : 1;
+  return prefs.fadeInBreak ? fadeInFactor(state.remainingMs, ms) : 1;
+}
+
 function applyFade(state) {
-  const enabled = state.phase === 'work' ? prefs.fadeFocus : prefs.fadeBreak;
-  noise.setFade(enabled ? fadeFactor(state.remainingMs, prefs.fadeSeconds * 1000) : 1);
+  noise.setFade(noiseLevel(state));
 }
 
 // ---- noise policy ------------------------------------------------------------
 
 function syncNoise(state) {
-  const active = prefs.noiseEnabled && (!prefs.focusOnly || (state.status === 'running' && state.phase === 'work'));
+  // With "fade in at the end of a break" the break is silent until the fade
+  // window opens, so the noise only runs once the level is above zero. This
+  // takes precedence over "only play while focusing" so the fade can be heard.
+  const fadingInBreak = state.phase !== 'work' && prefs.fadeInBreak;
+  const active = prefs.noiseEnabled && (fadingInBreak
+    ? noiseLevel(state) > 0
+    : !prefs.focusOnly || (state.status === 'running' && state.phase === 'work'));
   if (active) noise.play().catch(() => {});
   else noise.stop();
 }
@@ -140,8 +152,8 @@ function render(state) {
   $('noise-toggle').setAttribute('aria-pressed', String(prefs.noiseEnabled));
   $('noise-type').value = prefs.noiseType;
 
-  syncNoise(state);
   applyFade(state);
+  syncNoise(state);
   bridge.updateState({
     ...state,
     label: PHASE_LABEL[state.phase],
@@ -221,7 +233,7 @@ $('autoStartNext').onchange = (e) => {
   timer.updateSettings({ autoStartNext: prefs.autoStartNext });
 };
 
-for (const key of ['chimeOnStart', 'chimeOnEnd', 'fadeFocus', 'fadeBreak']) {
+for (const key of ['chimeOnStart', 'chimeOnEnd', 'fadeFocus', 'fadeInBreak']) {
   $(key).checked = prefs[key];
   $(key).onchange = (e) => {
     prefs[key] = e.target.checked;

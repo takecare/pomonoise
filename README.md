@@ -15,7 +15,7 @@ Inspired by [Tomighty](https://github.com/tomighty/tomighty) (timer) and
 - System notifications when a phase starts or ends.
 - Option to play noise only while focusing.
 - Generated chimes (no audio files): a rising two-note chime when a focus session starts and a falling three-note one when it ends. Each can be switched off separately.
-- Fade-out: the noise can fade away over the last X seconds of a focus session and/or of a break (two separate switches, one shared duration, 30 s by default). Off by default.
+- Fades (two separate switches, one shared duration, 30 s by default, both off by default): the noise can **fade out** over the last X seconds of a focus session, and it can **fade in** over the last X seconds of a break, staying silent for the rest of the break so it arrives just as focus begins.
 - Preferences are remembered between sessions.
 
 ## Next features
@@ -196,7 +196,7 @@ Measured in Chromium with the real audio graph, the played spectrum follows the 
 
 ## How chimes and fade-out work
 
-Both are driven by the timer's events in `app.js`; neither touches the timer logic.
+Both are driven by the timer's events and state in `app.js`; neither touches the timer logic.
 
 **Chimes** are synthesised, not recorded. Each note is three sine partials at inharmonic ratios (1 : 2.76 : 5.4, roughly a small bell) with an instant attack and an exponential decay; higher partials die away faster. `chime.js` holds the notes as data (`chimeNotes`, unit-tested) and schedules oscillators on the Web Audio clock. The chimes have their own audio context and a fixed level; they do not go through the noise curve or the volume slider, so they are audible even when the noise is off or turned down. In Settings, "Play" previews each one.
 
@@ -207,14 +207,25 @@ Both are driven by the timer's events in `app.js`; neither touches the timer log
 
 Break phases never chime; the desktop notification still fires for every phase.
 
-**Fade-out** multiplies the volume slider by `fadeFactor(remaining, fadeSeconds)` (`fade.js`), which is 1 until `fadeSeconds` are left in the phase and then falls in a straight line to 0 at 00:00. Because the slider maps to gain squared, the fade falls steadily in perceived loudness (halfway through the fade the level is −12 dB). It is applied every 250 ms with a short smoothing constant, so there are no audible steps. The switches are per kind of phase (focus / break); while the timer is paused or idle the level simply holds. When the next phase starts, the volume returns to the slider's level.
+**Fades** multiply the volume slider by a level between 0 and 1 that depends on the time left in the current phase and on `fadeSeconds` (`fade.js`):
+
+| Phase | Switch | Level |
+|---|---|---|
+| focus | "Fade out at the end of a focus session" | 1 until `fadeSeconds` are left, then a straight line down to 0 at 00:00 (`fadeFactor`) |
+| break | "Fade in at the end of a break" | 0 (silent) until `fadeSeconds` are left, then a straight line up to 1 at 00:00 (`fadeInFactor`) |
+
+Because the slider maps to gain squared, both fades change steadily in perceived loudness (halfway through, the level is −12 dB). The level is applied every 250 ms with a short smoothing constant, so there are no audible steps. While the timer is paused or idle the level simply holds.
+
+With "Fade in at the end of a break" on, the break is silent until the fade window opens, so the noise is only started at that point (the fade-in takes precedence over "Only play while focusing", otherwise you would never hear it). Together with the focus fade-out this gives a full cycle: fade out, quiet break, fade in, focus. With the fade-in off, a break behaves as before: the noise follows the noise on/off switch and "Only play while focusing".
 
 ```mermaid
 flowchart LR
     T["PomodoroTimer<br/>events + state"] -->|"start / end<br/>(focus only)"| C["ChimePlayer<br/>own audio context"]
-    T -->|"remainingMs, phase<br/>every 250 ms"| F["fadeFactor"]
-    P["Fade settings<br/>focus, break, seconds"] --> F
-    F -->|"setFade(0..1)"| N["NoisePlayer<br/>master gain = (volume × fade)²"]
+    T -->|"phase, remainingMs<br/>every 250 ms"| L["noiseLevel"]
+    P["Fade settings<br/>fade out (focus), fade in (break), seconds"] --> L
+    L -->|"fadeFactor / fadeInFactor"| N["NoisePlayer<br/>master gain = (volume × level)²"]
+    L -->|"level > 0 in a break"| R["start / stop noise"]
+    R --> N
     C --> S(("Speakers"))
     N --> S
 ```
@@ -282,11 +293,11 @@ npm test
 Runs Node's built-in test runner over `test/*.test.js`. It covers:
 - the timer (countdown, pause/resume, phase order, long breaks, skip, reset, settings);
 - the white-noise generator (range, loudness, loop seam, flatness);
-- the fade curve and the chime definitions;
+- the fade-out and fade-in curves and the chime definitions;
 - the curve maths (preset slopes, preset matching, the filter solver hitting its target points, straight slopes between points, loudness compensation);
 - spectrum smoothing and alignment.
 
-The Electron shell, the audio graph, the chime synthesis and the canvas editor are not covered by automated tests; they were checked manually in Chromium (including a fake-clock run that fast-forwards through a focus session to check chimes and fades trigger at the right moments).
+The Electron shell, the audio graph, the chime synthesis and the canvas editor are not covered by automated tests; they were checked manually in Chromium (including a fake-clock run that fast-forwards through a focus session to check chimes and fades trigger at the right moments, including the silent break and the rising fade-in).
 
 ## Notes on the tray icon
 

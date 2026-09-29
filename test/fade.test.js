@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fadeFactor } from '../src/renderer/fade.js';
+import { fadeFactor, fadeInFactor } from '../src/renderer/fade.js';
 
 test('full volume until the fade window opens', () => {
   assert.equal(fadeFactor(60_000, 30_000), 1);
@@ -32,4 +32,22 @@ test('the fade is even in perceived loudness: gain (slider^2) halves in level st
   // Halfway through, the slider value is halved, so gain drops to a quarter (-12 dB).
   const g = fadeFactor(15_000, 30_000) ** 2;
   assert.equal(g, 0.25);
+});
+
+test('fade in: silent until the window opens, then rises to full at the end', () => {
+  assert.equal(fadeInFactor(120_000, 30_000), 0);
+  assert.equal(fadeInFactor(30_000, 30_000), 0);
+  assert.equal(fadeInFactor(15_000, 30_000), 0.5);
+  assert.equal(fadeInFactor(0, 30_000), 1);
+});
+
+test('fade in and fade out are mirror images', () => {
+  for (const r of [0, 3_000, 15_000, 29_000, 45_000]) {
+    assert.ok(Math.abs(fadeInFactor(r, 30_000) + fadeFactor(r, 30_000) - 1) < 1e-12);
+  }
+});
+
+test('an invalid fade length leaves the level at full', () => {
+  assert.equal(fadeInFactor(0, 0), 1);
+  assert.equal(fadeInFactor(10, NaN), 1);
 });

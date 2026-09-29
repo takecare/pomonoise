@@ -8,3 +8,10 @@ export function fadeFactor(remainingMs, fadeMs) {
   if (!(fadeMs > 0)) return 1;
   return Math.min(1, Math.max(0, remainingMs / fadeMs));
 }
+
+// The mirror image, for fading in: 0 (silent) until `fadeMs` are left, then
+// rising in a straight line to 1 at 00:00. Same perceptual shaping as above.
+export function fadeInFactor(remainingMs, fadeMs) {
+  if (!(fadeMs > 0)) return 1;
+  return 1 - fadeFactor(remainingMs, fadeMs);
+}
