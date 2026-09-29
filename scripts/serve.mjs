@@ -13,8 +13,9 @@ createServer(async (req, res) => {
   const file = join(root, path === '/' ? 'index.html' : path);
   if (!file.startsWith(root)) return res.writeHead(403).end();
   try {
+    const body = await readFile(file); // read first: a missing file must not leave a 200 header behind
     res.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream' });
-    res.end(await readFile(file));
+    res.end(body);
   } catch {
     res.writeHead(404).end('not found');
   }

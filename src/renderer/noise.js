@@ -11,6 +11,7 @@ const LOOP_SECONDS = 12;
 const FADE_SECONDS = 1;
 const FFT_SIZE = 8192;
 const SMOOTHING_S = 0.03; // time constant for parameter changes, avoids zipper noise
+const FADE_SMOOTHING_S = 0.3; // slower, so fade steps and the jump back to full volume are gentle
 
 // White noise that loops seamlessly, normalised to a fixed loudness. Pure, so
 // it can be unit-tested in Node.
@@ -41,13 +42,25 @@ export class NoisePlayer {
   #spectrum = null;
   #target = null; // requested curve, dB per band
   #volume = 0.5;
+  #fade = 1; // 0..1 multiplier on the volume slider, driven by the fade-out setting
   #playing = false;
 
   get playing() { return this.#playing; }
 
   setVolume(v) {
     this.#volume = Math.min(1, Math.max(0, v));
-    if (this.#master) this.#ramp(this.#master.gain, this.#volume ** 2);
+    if (this.#master && this.#playing) this.#ramp(this.#master.gain, this.#gainTarget());
+  }
+
+  // Scale the volume for a fade-out (1 = full, 0 = silent).
+  setFade(multiplier) {
+    this.#fade = Math.min(1, Math.max(0, multiplier));
+    if (this.#master && this.#playing) this.#ramp(this.#master.gain, this.#gainTarget(), FADE_SMOOTHING_S);
+  }
+
+  // The slider maps to gain squared, which tracks perceived loudness better than linear.
+  #gainTarget() {
+    return (this.#volume * this.#fade) ** 2;
   }
 
   // targetDb: desired level (dB relative to white noise) at each of BAND_FREQS.
@@ -64,7 +77,7 @@ export class NoisePlayer {
     if (!this.#playing) return; // stopped while resuming
     this.#master.gain.value = 0;
     this.#startSource();
-    this.#ramp(this.#master.gain, this.#volume ** 2, 0.1);
+    this.#ramp(this.#master.gain, this.#gainTarget(), 0.1);
   }
 
   stop() {

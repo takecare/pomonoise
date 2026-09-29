@@ -49,6 +49,21 @@
       <label>Long break (min) <input id="longBreakMinutes" type="number" min="1" max="120"></label>
       <label>Long break every <input id="longBreakEvery" type="number" min="2" max="12"> pomodoros</label>
       <label class="check"><input id="autoStartNext" type="checkbox"> Start next phase automatically</label>
+
+      <h3>Chimes</h3>
+      <div class="option">
+        <label class="check"><input id="chimeOnStart" type="checkbox"> Chime when focus starts</label>
+        <button id="preview-start" class="small" aria-label="Preview the start chime">Play</button>
+      </div>
+      <div class="option">
+        <label class="check"><input id="chimeOnEnd" type="checkbox"> Chime when focus ends</label>
+        <button id="preview-end" class="small" aria-label="Preview the end chime">Play</button>
+      </div>
+
+      <h3>Fade out noise</h3>
+      <label class="check"><input id="fadeFocus" type="checkbox"> At the end of a focus session</label>
+      <label class="check"><input id="fadeBreak" type="checkbox"> At the end of a break</label>
+      <label>Fade duration (seconds) <input id="fadeSeconds" type="number" min="1" max="300"></label>
     </details>
   </main>
   <script type="module" src="app.js"></script>

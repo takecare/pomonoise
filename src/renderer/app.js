@@ -2,6 +2,8 @@ import { PomodoroTimer, DEFAULT_SETTINGS, formatTime } from './timer.js';
 import { NoisePlayer } from './noise.js';
 import { PRESET_NAMES, presetCurve, matchPreset, isValidCurve, GRID_FREQS } from './eq.js';
 import { smoothSpectrum } from './spectrum.js';
+import { fadeFactor } from './fade.js';
+import { ChimePlayer } from './chime.js';
 import { createEqEditor } from './eq-editor.js';
 
 const PHASE_LABEL = { work: 'Focus', short: 'Short break', long: 'Long break' };
@@ -30,6 +32,11 @@ const prefs = {
   volume: 0.5,
   focusOnly: false,
   showSpectrum: true,
+  chimeOnStart: true, // chime when a focus session starts
+  chimeOnEnd: true, // chime when a focus session ends
+  fadeFocus: false, // fade the noise out at the end of a focus session
+  fadeBreak: false, // ... and at the end of a break
+  fadeSeconds: 30, // how long the fade lasts
 };
 try {
   Object.assign(prefs, JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}'));
@@ -45,6 +52,7 @@ const savePrefs = () => {
 // ---- core objects ------------------------------------------------------------
 
 const noise = new NoisePlayer();
+const chime = new ChimePlayer();
 noise.setCurve(prefs.curve);
 noise.setVolume(prefs.volume);
 
@@ -61,14 +69,28 @@ const timer = new PomodoroTimer(prefs, {
   emit(type, data) {
     if (type === 'change') render(data);
     else if (type === 'start') {
+      if (data.phase === 'work' && prefs.chimeOnStart) chime.play('start').catch(() => {});
       const minutes = Math.round(timer.state.totalMs / 60000);
       bridge.notify(NOTIFICATIONS.start[data.phase], `${minutes} minutes`);
     } else if (type === 'end') {
+      if (data.phase === 'work' && prefs.chimeOnEnd) chime.play('end').catch(() => {});
       bridge.notify(...NOTIFICATIONS.end[data.phase]);
     }
   },
 });
-setInterval(() => timer.tick(), 250);
+setInterval(() => {
+  timer.tick();
+  applyFade(timer.state);
+}, 250);
+
+// ---- fade-out ----------------------------------------------------------------
+
+// Fade the noise over the last `fadeSeconds` of a phase, if enabled for that
+// kind of phase. While paused or idle the level simply holds.
+function applyFade(state) {
+  const enabled = state.phase === 'work' ? prefs.fadeFocus : prefs.fadeBreak;
+  noise.setFade(enabled ? fadeFactor(state.remainingMs, prefs.fadeSeconds * 1000) : 1);
+}
 
 // ---- noise policy ------------------------------------------------------------
 
@@ -119,6 +141,7 @@ function render(state) {
   $('noise-type').value = prefs.noiseType;
 
   syncNoise(state);
+  applyFade(state);
   bridge.updateState({
     ...state,
     label: PHASE_LABEL[state.phase],
@@ -197,6 +220,25 @@ $('autoStartNext').onchange = (e) => {
   savePrefs();
   timer.updateSettings({ autoStartNext: prefs.autoStartNext });
 };
+
+for (const key of ['chimeOnStart', 'chimeOnEnd', 'fadeFocus', 'fadeBreak']) {
+  $(key).checked = prefs[key];
+  $(key).onchange = (e) => {
+    prefs[key] = e.target.checked;
+    savePrefs();
+    applyFade(timer.state);
+  };
+}
+$('fadeSeconds').value = prefs.fadeSeconds;
+$('fadeSeconds').onchange = (e) => {
+  const v = Math.max(1, Math.min(300, Math.round(Number(e.target.value)) || prefs.fadeSeconds));
+  e.target.value = v;
+  prefs.fadeSeconds = v;
+  savePrefs();
+  applyFade(timer.state);
+};
+$('preview-start').onclick = () => chime.play('start').catch(() => {});
+$('preview-end').onclick = () => chime.play('end').catch(() => {});
 
 // Commands coming from the menubar item.
 bridge.onCommand(({ name, value }) => {

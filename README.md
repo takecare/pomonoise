@@ -14,13 +14,14 @@ Inspired by [Tomighty](https://github.com/tomighty/tomighty) (timer) and
 - Menubar item (macOS app only) showing the countdown, with a menu to start, pause, skip, reset and control the noise.
 - System notifications when a phase starts or ends.
 - Option to play noise only while focusing.
+- Generated chimes (no audio files): a rising two-note chime when a focus session starts and a falling three-note one when it ends. Each can be switched off separately.
+- Fade-out: the noise can fade away over the last X seconds of a focus session and/or of a break (two separate switches, one shared duration, 30 s by default). Off by default.
 - Preferences are remembered between sessions.
 
 ## Next features
 
 1. **Menubar visualiser**: show the curve and live spectrum when the menubar item is clicked. Native macOS menus cannot draw a canvas, so this means opening a small popover window under the icon and streaming the spectrum to it.
-2. **Fade-out setting**: start fading the noise away when X seconds are left in the current pomodoro.
-3. Possible follow-ups: free-hand curve drawing, saving named custom curves.
+2. Possible follow-ups: free-hand curve drawing, saving named custom curves, a separate chime volume.
 
 ## Two ways to run it, one codebase
 
@@ -51,7 +52,9 @@ src/
     timer.js          pure pomodoro state machine (injected clock, unit-tested)
     eq.js             the noise curve: presets, biquad maths, filter solver (pure, unit-tested)
     spectrum.js       FFT bins -> smoothed log-frequency curve (pure, unit-tested)
-    noise.js          white-noise generator (pure) + Web Audio player (filter chain, analyser)
+    noise.js          white-noise generator (pure) + Web Audio player (filter chain, analyser, fade)
+    fade.js           fade-out curve (pure, unit-tested)
+    chime.js          chime definitions (pure) + synthesis and player
     eq-editor.js      canvas widget: draggable curve points + live spectrum overlay
     app.js            UI wiring, saved preferences, noise policy, host bridge
     index.html, style.css
@@ -191,6 +194,31 @@ flowchart LR
 
 Measured in Chromium with the real audio graph, the played spectrum follows the target curve of each preset to within about 1 dB (0.2 dB on average) between 50 Hz and 12 kHz.
 
+## How chimes and fade-out work
+
+Both are driven by the timer's events in `app.js`; neither touches the timer logic.
+
+**Chimes** are synthesised, not recorded. Each note is three sine partials at inharmonic ratios (1 : 2.76 : 5.4, roughly a small bell) with an instant attack and an exponential decay; higher partials die away faster. `chime.js` holds the notes as data (`chimeNotes`, unit-tested) and schedules oscillators on the Web Audio clock. The chimes have their own audio context and a fixed level; they do not go through the noise curve or the volume slider, so they are audible even when the noise is off or turned down. In Settings, "Play" previews each one.
+
+| Event | Chime |
+|---|---|
+| a focus session starts | E5 → B5, short and rising |
+| a focus session ends | G5 → E5 → C5, longer and falling |
+
+Break phases never chime; the desktop notification still fires for every phase.
+
+**Fade-out** multiplies the volume slider by `fadeFactor(remaining, fadeSeconds)` (`fade.js`), which is 1 until `fadeSeconds` are left in the phase and then falls in a straight line to 0 at 00:00. Because the slider maps to gain squared, the fade falls steadily in perceived loudness (halfway through the fade the level is −12 dB). It is applied every 250 ms with a short smoothing constant, so there are no audible steps. The switches are per kind of phase (focus / break); while the timer is paused or idle the level simply holds. When the next phase starts, the volume returns to the slider's level.
+
+```mermaid
+flowchart LR
+    T["PomodoroTimer<br/>events + state"] -->|"start / end<br/>(focus only)"| C["ChimePlayer<br/>own audio context"]
+    T -->|"remainingMs, phase<br/>every 250 ms"| F["fadeFactor"]
+    P["Fade settings<br/>focus, break, seconds"] --> F
+    F -->|"setFade(0..1)"| N["NoisePlayer<br/>master gain = (volume × fade)²"]
+    C --> S(("Speakers"))
+    N --> S
+```
+
 ## Building and hosting the web app
 
 There is **no build step**. `src/renderer/` is already a static site: only relative paths and no bundler, so it works from any URL, including the `/pomonoise/` subpath on GitHub Pages.
@@ -254,10 +282,11 @@ npm test
 Runs Node's built-in test runner over `test/*.test.js`. It covers:
 - the timer (countdown, pause/resume, phase order, long breaks, skip, reset, settings);
 - the white-noise generator (range, loudness, loop seam, flatness);
+- the fade curve and the chime definitions;
 - the curve maths (preset slopes, preset matching, the filter solver hitting its target points, straight slopes between points, loudness compensation);
 - spectrum smoothing and alignment.
 
-The Electron shell, the audio graph and the canvas editor are not covered by automated tests; they were checked manually in Chromium.
+The Electron shell, the audio graph, the chime synthesis and the canvas editor are not covered by automated tests; they were checked manually in Chromium (including a fake-clock run that fast-forwards through a focus session to check chimes and fades trigger at the right moments).
 
 ## Notes on the tray icon
 
