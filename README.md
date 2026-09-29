@@ -10,6 +10,12 @@ Inspired by [Tomighty](https://github.com/tomighty/tomighty) and
 - System notifications when a phase starts or ends
 - Optionally play noise only while focusing
 
+## Web version
+
+The UI also runs as a plain web app (no menubar; notifications use the browser's
+Notification API). It is deployed to GitHub Pages from `main` at
+https://takecare.github.io/pomonoise/.
+
 ## Run
 
 ```sh
