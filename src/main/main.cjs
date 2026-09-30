@@ -1,5 +1,5 @@
 const path = require('node:path');
-const { app, BrowserWindow, Tray, Menu, Notification, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, Notification, nativeImage, nativeTheme, ipcMain } = require('electron');
 
 // Noise must be able to start from the menubar without a click inside the window.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -14,6 +14,7 @@ function createWindow() {
     width: 400,
     height: 640,
     title: 'Pomonoise',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1917' : '#fafaf9', // no white flash in dark mode
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -92,6 +93,11 @@ app.whenReady().then(() => {
   ipcMain.on('state', (_e, state) => {
     last = state;
     updateTray();
+  });
+  // The page's Theme setting: 'system' | 'light' | 'dark'. Making Electron follow it
+  // keeps the window frame and prefers-color-scheme consistent with the page.
+  ipcMain.on('theme', (_e, theme) => {
+    if (['system', 'light', 'dark'].includes(theme)) nativeTheme.themeSource = theme;
   });
   ipcMain.on('notify', (_e, { title, body }) => {
     if (Notification.isSupported()) new Notification({ title, body, silent: true }).show();

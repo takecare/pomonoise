@@ -238,6 +238,7 @@ export function createEqEditor(canvas, { onChange = () => {}, onReadout = () => 
 
   new ResizeObserver(resize).observe(canvas);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', requestDraw);
+  new MutationObserver(requestDraw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   resize();
 
   return {

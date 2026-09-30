@@ -1,3 +1,7 @@
+/* Theme: light by default, dark when the system asks for it, and either can be
+   forced with data-theme="light" | "dark" on <html> (the Theme setting).
+   The dark palette appears twice because CSS cannot share one rule between a
+   media query and an attribute selector. */
 :root {
   --bg: #fafaf9;
   --fg: #1c1917;
@@ -5,12 +9,22 @@
   --card: #ffffff;
   --border: #e7e5e4;
   --accent: #dc2626;
-  color-scheme: light dark;
+  --accent-break: #16a34a;
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #1c1917; --fg: #fafaf9; --muted: #a8a29e; --card: #292524; --border: #44403c; --accent: #f87171; }
+  :root:not([data-theme="light"]) {
+    --bg: #1c1917; --fg: #fafaf9; --muted: #a8a29e; --card: #292524; --border: #44403c;
+    --accent: #f87171; --accent-break: #4ade80;
+    color-scheme: dark;
+  }
 }
-body[data-phase="short"], body[data-phase="long"] { --accent: #16a34a; }
+:root[data-theme="dark"] {
+  --bg: #1c1917; --fg: #fafaf9; --muted: #a8a29e; --card: #292524; --border: #44403c;
+  --accent: #f87171; --accent-break: #4ade80;
+  color-scheme: dark;
+}
+body[data-phase="short"], body[data-phase="long"] { --accent: var(--accent-break); }
 
 * { box-sizing: border-box; }
 body {

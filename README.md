@@ -16,6 +16,7 @@ Inspired by [Tomighty](https://github.com/tomighty/tomighty) (timer) and
 - Option to play noise only while focusing.
 - Generated chimes (no audio files): a rising two-note chime when a focus session starts and a falling three-note one when it ends. Each can be switched off separately.
 - Fades (two separate switches, one shared duration, 30 s by default, both off by default): the noise can **fade out** over the last X seconds of a focus session, and it can **fade in** over the last X seconds of a break, staying silent for the rest of the break so it arrives just as focus begins.
+- Light and dark themes. By default the app follows the system setting live; Settings → Appearance → Theme can force Light or Dark.
 - Preferences are remembered between sessions.
 
 ## Next features
@@ -53,7 +54,9 @@ src/
     eq.js             the noise curve: presets, biquad maths, filter solver (pure, unit-tested)
     spectrum.js       FFT bins -> smoothed log-frequency curve (pure, unit-tested)
     noise.js          white-noise generator (pure) + Web Audio player (filter chain, analyser, fade)
-    fade.js           fade-out curve (pure, unit-tested)
+    fade.js           fade-out / fade-in curves (pure, unit-tested)
+    theme.js          theme names and applying the data-theme override (pure, unit-tested)
+    theme-init.js     tiny pre-paint script so a saved theme override doesn't flash
     chime.js          chime definitions (pure) + synthesis and player
     eq-editor.js      canvas widget: draggable curve points + live spectrum overlay
     app.js            UI wiring, saved preferences, noise policy, host bridge
@@ -113,6 +116,7 @@ The page and the main process cannot call each other directly (`contextIsolation
 |---|---|---|
 | page → main | `updateState(state)` | after every timer change (about once a second) and every noise change; main redraws the menubar title and menu |
 | page → main | `notify(title, body)` | when a phase starts or ends; main shows a native notification |
+| page → main | `setTheme(theme)` | when the Theme setting changes (and at startup); main sets `nativeTheme.themeSource` so the window frame follows |
 | main → page | `onCommand(cb)` | menu clicks: `toggle`, `skip`, `reset`, `noise`, `noiseType` |
 
 ```mermaid
@@ -230,6 +234,15 @@ flowchart LR
     N --> S
 ```
 
+## How the theme works
+
+The default is to follow the system: `style.css` defines the light palette on `:root` and swaps to the dark one under `@media (prefers-color-scheme: dark)`, so it changes live when the OS does. The Theme setting adds an override on top: choosing Light or Dark sets `data-theme="light"` or `"dark"` on `<html>`, and choosing Follow system removes the attribute. In CSS the override wins over the media query.
+
+- **No flash:** `theme-init.js` is a small classic script in `<head>` (inline scripts are not allowed by the app's Content-Security-Policy) that applies a saved override before the first paint.
+- **The curve chart** is drawn on a canvas, which does not follow CSS by itself. It reads the colour variables each time it draws, and redraws when `data-theme` changes or the OS scheme changes.
+- **Desktop app:** the page also tells the main process, which sets Electron's `nativeTheme.themeSource`, so the window frame and Chromium's own idea of the colour scheme agree with the setting. This part is untested (no macOS here).
+- The dark palette appears twice in the CSS (once for the media query, once for the attribute) because CSS cannot share one rule between the two.
+
 ## Building and hosting the web app
 
 There is **no build step**. `src/renderer/` is already a static site: only relative paths and no bundler, so it works from any URL, including the `/pomonoise/` subpath on GitHub Pages.
@@ -294,10 +307,11 @@ Runs Node's built-in test runner over `test/*.test.js`. It covers:
 - the timer (countdown, pause/resume, phase order, long breaks, skip, reset, settings);
 - the white-noise generator (range, loudness, loop seam, flatness);
 - the fade-out and fade-in curves and the chime definitions;
+- theme selection (`normalizeTheme`, `applyTheme`);
 - the curve maths (preset slopes, preset matching, the filter solver hitting its target points, straight slopes between points, loudness compensation);
 - spectrum smoothing and alignment.
 
-The Electron shell, the audio graph, the chime synthesis and the canvas editor are not covered by automated tests; they were checked manually in Chromium (including a fake-clock run that fast-forwards through a focus session to check chimes and fades trigger at the right moments, including the silent break and the rising fade-in).
+The Electron shell, the audio graph, the chime synthesis and the canvas editor are not covered by automated tests; they were checked manually in Chromium (including a fake-clock run that fast-forwards through a focus session to check chimes and fades trigger at the right moments, including the silent break and the rising fade-in; the theme was checked for every combination of OS scheme and setting, live switching, persistence and no flash).
 
 ## Notes on the tray icon
 

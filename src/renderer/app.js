@@ -4,6 +4,7 @@ import { PRESET_NAMES, presetCurve, matchPreset, isValidCurve, GRID_FREQS } from
 import { smoothSpectrum } from './spectrum.js';
 import { fadeFactor, fadeInFactor } from './fade.js';
 import { ChimePlayer } from './chime.js';
+import { applyTheme, normalizeTheme } from './theme.js';
 import { createEqEditor } from './eq-editor.js';
 
 const PHASE_LABEL = { work: 'Focus', short: 'Short break', long: 'Long break' };
@@ -32,6 +33,7 @@ const prefs = {
   volume: 0.5,
   focusOnly: false,
   showSpectrum: true,
+  theme: 'system', // 'system' | 'light' | 'dark'
   chimeOnStart: true, // chime when a focus session starts
   chimeOnEnd: true, // chime when a focus session ends
   fadeFocus: false, // fade the noise out over the end of a focus session
@@ -45,6 +47,8 @@ if (!isValidCurve(prefs.curve)) {
   prefs.curve = presetCurve(PRESET_NAMES.includes(prefs.noiseType) ? prefs.noiseType : 'brown');
 }
 prefs.noiseType = matchPreset(prefs.curve);
+prefs.theme = applyTheme(document.documentElement, prefs.theme);
+bridge.setTheme?.(prefs.theme); // Electron: make the window frame follow too
 const savePrefs = () => {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch {}
 };
@@ -231,6 +235,13 @@ $('autoStartNext').onchange = (e) => {
   prefs.autoStartNext = e.target.checked;
   savePrefs();
   timer.updateSettings({ autoStartNext: prefs.autoStartNext });
+};
+
+$('theme').value = prefs.theme;
+$('theme').onchange = (e) => {
+  prefs.theme = applyTheme(document.documentElement, e.target.value);
+  bridge.setTheme?.(prefs.theme);
+  savePrefs();
 };
 
 for (const key of ['chimeOnStart', 'chimeOnEnd', 'fadeFocus', 'fadeInBreak']) {
