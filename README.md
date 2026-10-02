@@ -11,6 +11,7 @@ Inspired by [Tomighty](https://github.com/tomighty/tomighty) (timer) and
 - Pomodoro / short break / long break cycle. Durations are configurable, and a long break comes every N pomodoros.
 - Noise generated live with Web Audio (no audio files). The sound is defined by a **curve**: drag ten coloured points (31 Hz to 16 kHz, ±30 dB) to shape it. White, pink, brown, blue and violet are presets of that curve.
 - Live spectrum: the measured spectrum of what is actually playing, drawn over the curve.
+- Background visualiser (web version only): the spectrum of what is playing, drawn as soft coloured mountains filling the page behind the controls. It can be switched off in Settings.
 - Menubar item (macOS app only) showing the countdown, with a menu to start, pause, skip, stop and control the noise.
 - System notifications when a phase starts or ends.
 - Option to play noise only while focusing.
@@ -32,6 +33,7 @@ Everything the app does (timer, noise, UI) lives in `src/renderer/`, plain HTML/
 |---|---|---|
 | Host | Electron | Any browser |
 | Menubar item | yes | no |
+| Background visualiser | no | yes (Settings → Appearance) |
 | Notifications | native macOS, via Electron | browser Notification API (asks permission) |
 | Runs with window closed / tab hidden | yes | the tab must stay open; browsers may throttle hidden tabs |
 | Distribution | `.app` / `.dmg` you build yourself | GitHub Pages |
@@ -59,6 +61,7 @@ src/
     theme-init.js     tiny pre-paint script so a saved theme override doesn't flash
     chime.js          chime definitions (pure) + synthesis and player
     eq-editor.js      canvas widget: draggable curve points + live spectrum overlay
+    backdrop.js       background visualiser: pure level/smoothing maths + canvas drawing (web only)
     app.js            UI wiring, saved preferences, noise policy, host bridge
     index.html, style.css
     favicon.svg, favicon-32.png, apple-touch-icon.png   site icons (see below)
@@ -200,6 +203,25 @@ flowchart LR
 
 Measured in Chromium with the real audio graph, the played spectrum follows the target curve of each preset to within about 1 dB (0.2 dB on average) between 50 Hz and 12 kHz.
 
+## How the background visualiser works
+
+On the web version a full-page `<canvas>` sits behind the controls (`position: fixed`, `pointer-events: none`, hidden from screen readers) and the cards become frosted glass (`backdrop-filter` blur over a semi-transparent card colour) so it shows through them.
+
+```mermaid
+flowchart LR
+    A["Analyser<br/>(FFT bins, dB)"] -->|"once per frame"| L["levelsFromSpectrum<br/>1/3-octave smoothing,<br/>dB → 0..1 heights"]
+    L --> U["backdrop.update"]
+    V["volume slider × fade level"] -->|"scale"| U
+    U --> F["two layers follow the target<br/>fast (rise 0.4, fall 0.1)<br/>slow afterglow (0.05 / 0.02)"]
+    F --> D["draw: smooth filled curve<br/>in the frequency colours"]
+```
+
+- **What the shape means:** left is low frequencies, right is high, on the same log axis and colours as the curve editor. Brown piles up on the left, violet on the right, white sits level.
+- **Height:** it is calibrated against flat white noise, which is drawn at mid-height; a boost of 30 dB reaches the top. The calibration constant (`WHITE_DB` in `backdrop.js`) was measured with the real analyser. The volume slider changes the height a little, and fades take it all the way down, so a fade-out visibly sinks the picture and a break fade-in lets it rise.
+- **Cost:** it draws only while the page is visible and sound is playing. When it has faded to nothing it wipes the canvas once and does no work at all until sound returns (checked: zero repaints when idle).
+- **Web only:** the shared `app.js` checks for the Electron bridge (`window.pomonoise`); on desktop the canvas is removed and the setting is hidden.
+- **Motion:** it defaults to off if the system asks for reduced motion, and can still be switched on in Settings.
+
 ## How chimes and fade-out work
 
 Both are driven by the timer's events and state in `app.js`; neither touches the timer logic.
@@ -311,9 +333,10 @@ Runs Node's built-in test runner over `test/*.test.js`. It covers:
 - the fade-out and fade-in curves and the chime definitions;
 - theme selection (`normalizeTheme`, `applyTheme`);
 - the curve maths (preset slopes, preset matching, the filter solver hitting its target points, straight slopes between points, loudness compensation);
-- spectrum smoothing and alignment.
+- spectrum smoothing and alignment;
+- the background visualiser's maths (dB → height mapping and calibration, attack/release smoothing).
 
-The Electron shell, the audio graph, the chime synthesis and the canvas editor are not covered by automated tests; they were checked manually in Chromium (including a fake-clock run that fast-forwards through a focus session to check chimes and fades trigger at the right moments, including the silent break and the rising fade-in; the theme was checked for every combination of OS scheme and setting, live switching, persistence and no flash).
+The Electron shell, the audio graph, the chime synthesis and the canvas editor are not covered by automated tests; they were checked manually in Chromium (including a fake-clock run that fast-forwards through a focus session to check chimes and fades trigger at the right moments, including the silent break and the rising fade-in, and the background visualiser (calibration against the real analyser, painting and zero work when idle, the setting, reduced motion, desktop mode, fade-out sinking it); the theme was checked for every combination of OS scheme and setting, live switching, persistence and no flash).
 
 ## Icons
 

@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <canvas id="backdrop" class="backdrop" aria-hidden="true"></canvas>
   <main>
     <section class="timer" aria-label="Timer">
       <div id="phase" class="phase">Focus</div>
@@ -63,6 +64,8 @@
           <option value="dark">Dark</option>
         </select>
       </label>
+
+      <label class="check" id="backdrop-row"><input id="backdropOn" type="checkbox"> Background visualiser</label>
 
       <h3>Chimes</h3>
       <div class="option">

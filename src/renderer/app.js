@@ -6,6 +6,7 @@ import { fadeFactor, fadeInFactor } from './fade.js';
 import { ChimePlayer } from './chime.js';
 import { applyTheme, normalizeTheme } from './theme.js';
 import { createEqEditor } from './eq-editor.js';
+import { createBackdrop, levelsFromSpectrum } from './backdrop.js';
 
 const PHASE_LABEL = { work: 'Focus', short: 'Short break', long: 'Long break' };
 const $ = (id) => document.getElementById(id);
@@ -34,6 +35,8 @@ const prefs = {
   focusOnly: false,
   showSpectrum: true,
   theme: 'system', // 'system' | 'light' | 'dark'
+  // Web version only. Off by default for people who ask their system for reduced motion.
+  backdropOn: !matchMedia('(prefers-reduced-motion: reduce)').matches,
   chimeOnStart: true, // chime when a focus session starts
   chimeOnEnd: true, // chime when a focus session ends
   fadeFocus: false, // fade the noise out over the end of a focus session
@@ -190,19 +193,49 @@ $('show-spectrum').onchange = (e) => {
   savePrefs();
 };
 
-// Live spectrum of what is playing, drawn over the curve while the page is visible.
+// The desktop app has no background visualiser (it lives in the menubar and a small
+// window); on the web it is a full-page canvas behind the controls.
+const isDesktop = Boolean(window.pomonoise);
+const backdrop = isDesktop ? null : createBackdrop($('backdrop'));
+if (isDesktop) {
+  $('backdrop').remove();
+  $('backdrop-row').hidden = true;
+}
+
+function applyBackdropSetting() {
+  if (!backdrop) return; // desktop: nothing to show or hide
+  document.body.classList.toggle('has-backdrop', prefs.backdropOn);
+  $('backdrop').hidden = !prefs.backdropOn;
+  if (!prefs.backdropOn) backdrop.clear();
+}
+$('backdropOn').checked = prefs.backdropOn;
+$('backdropOn').onchange = (e) => {
+  prefs.backdropOn = e.target.checked;
+  savePrefs();
+  applyBackdropSetting();
+};
+applyBackdropSetting();
+
+// Once per animation frame, while the page is visible: read the analyser once and
+// feed the curve editor's overlay and the background visualiser.
 let spectrumShown = false;
 (function frame() {
   requestAnimationFrame(frame);
   if (document.hidden) return;
-  const show = prefs.showSpectrum && noise.playing;
-  if (show) {
-    const s = noise.readSpectrum();
-    if (s) editor.setMeasured(smoothSpectrum(s.db, s.binHz, GRID_FREQS));
-  } else if (spectrumShown) {
-    editor.setMeasured(null);
+  const showBackdrop = Boolean(backdrop) && prefs.backdropOn;
+  const playing = noise.playing;
+  const s = playing && (prefs.showSpectrum || showBackdrop) ? noise.readSpectrum() : null;
+
+  const showOverlay = prefs.showSpectrum && playing && s;
+  if (showOverlay) editor.setMeasured(smoothSpectrum(s.db, s.binHz, GRID_FREQS));
+  else if (spectrumShown) editor.setMeasured(null);
+  spectrumShown = Boolean(showOverlay);
+
+  if (showBackdrop) {
+    // The volume slider changes the height a little; fades take it all the way to nothing.
+    const scale = (0.4 + 0.6 * prefs.volume) * noise.fade;
+    backdrop.update(s ? levelsFromSpectrum(s.db, s.binHz) : null, scale);
   }
-  spectrumShown = show;
 })();
 
 $('volume').value = prefs.volume;

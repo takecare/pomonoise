@@ -46,6 +46,7 @@ export class NoisePlayer {
   #playing = false;
 
   get playing() { return this.#playing; }
+  get fade() { return this.#fade; }
 
   setVolume(v) {
     this.#volume = Math.min(1, Math.max(0, v));
