@@ -11,7 +11,7 @@ Inspired by [Tomighty](https://github.com/tomighty/tomighty) (timer) and
 - Pomodoro / short break / long break cycle. Durations are configurable, and a long break comes every N pomodoros.
 - Noise generated live with Web Audio (no audio files). The sound is defined by a **curve**: drag ten coloured points (31 Hz to 16 kHz, ±30 dB) to shape it. White, pink, brown, blue and violet are presets of that curve.
 - Live spectrum: the measured spectrum of what is actually playing, drawn over the curve.
-- Menubar item (macOS app only) showing the countdown, with a menu to start, pause, skip, reset and control the noise.
+- Menubar item (macOS app only) showing the countdown, with a menu to start, pause, skip, stop and control the noise.
 - System notifications when a phase starts or ends.
 - Option to play noise only while focusing.
 - Generated chimes (no audio files): a rising two-note chime when a focus session starts and a falling three-note one when it ends. Each can be switched off separately.
@@ -61,6 +61,7 @@ src/
     eq-editor.js      canvas widget: draggable curve points + live spectrum overlay
     app.js            UI wiring, saved preferences, noise policy, host bridge
     index.html, style.css
+    favicon.svg, favicon-32.png, apple-touch-icon.png   site icons (see below)
   main/               Electron only
     main.cjs          window, menubar (tray) item, native notifications
     preload.cjs       small IPC bridge exposed to the page as window.pomonoise
@@ -312,6 +313,11 @@ Runs Node's built-in test runner over `test/*.test.js`. It covers:
 - spectrum smoothing and alignment.
 
 The Electron shell, the audio graph, the chime synthesis and the canvas editor are not covered by automated tests; they were checked manually in Chromium (including a fake-clock run that fast-forwards through a focus session to check chimes and fades trigger at the right moments, including the silent break and the rising fade-in; the theme was checked for every combination of OS scheme and setting, live switching, persistence and no flash).
+
+## Icons
+
+- **Site icon:** `src/renderer/favicon.svg` (a red stopwatch). It scales to any size and is what modern browsers use. `favicon-32.png` is the fallback for browsers without SVG favicon support, and `apple-touch-icon.png` (180×180, full-bleed because iOS rounds the corners itself) is used when the page is added to an iOS home screen. The PNGs were rendered from the SVG; if you change the SVG, re-render them.
+- **The desktop app's own icon** (Dock, Finder) is not set yet: `npm run dist` builds with Electron's default icon.
 
 ## Notes on the tray icon
 

@@ -55,7 +55,7 @@ function buildMenu() {
       { label: `${s.label} — ${formatTime(s.remainingMs)}${s.status === 'paused' ? ' (paused)' : ''}`, enabled: false },
       { label: { idle: 'Start', running: 'Pause', paused: 'Resume' }[s.status], click: () => send('toggle') },
       { label: 'Skip', click: () => send('skip') },
-      { label: 'Reset', click: () => send('reset') },
+      { label: 'Stop', click: () => send('reset') },
       { type: 'separator' },
       { label: 'Noise', type: 'checkbox', checked: s.noiseEnabled, click: (item) => send('noise', item.checked) },
       {
