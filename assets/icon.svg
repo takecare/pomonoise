@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>Pomonoise app icon</title>
+  <!-- macOS app icon: the artwork is its own rounded square (824 px) inset in the 1024 px canvas, with a soft shadow -->
+  <defs>
+    <!-- units are the 64-unit artwork space (x 12.875 = pixels): blur 1.25 ~ 16 px, offset 1 ~ 13 px -->
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.25" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <g transform="translate(100 100) scale(12.875)" filter="url(#shadow)">
+    <rect width="64" height="64" rx="14" fill="#dc2626"/>
+    <rect x="27" y="7" width="10" height="6" rx="2" fill="#fff"/>
+    <circle cx="32" cy="36" r="18" fill="none" stroke="#fff" stroke-width="5"/>
+    <path d="M32 36V24M32 36l8 5" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -84,6 +84,11 @@ function updateTray() {
 }
 
 app.whenReady().then(() => {
+  // In development the Dock shows Electron's icon unless told otherwise (a packaged
+  // build gets its icon from the .app bundle, see "build" in package.json).
+  if (process.platform === 'darwin') {
+    app.dock?.setIcon(nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', 'icon.png')));
+  }
   const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', 'trayTemplate.png'));
   icon.setTemplateImage(true);
   tray = new Tray(icon);

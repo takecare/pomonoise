@@ -13,8 +13,20 @@
   "build": {
     "appId": "com.takecare.pomonoise",
     "productName": "Pomonoise",
-    "files": ["src/**/*", "assets/**/*"],
-    "mac": { "category": "public.app-category.productivity", "extendInfo": { "LSUIElement": false } }
+    "directories": {
+      "buildResources": "assets"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "icon.png",
+      "extendInfo": {
+        "LSUIElement": false
+      }
+    }
   },
   "license": "MIT",
   "devDependencies": {
