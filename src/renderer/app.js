@@ -5,6 +5,7 @@ import { smoothSpectrum } from './spectrum.js';
 import { fadeFactor, fadeInFactor } from './fade.js';
 import { ChimePlayer } from './chime.js';
 import { applyTheme, normalizeTheme } from './theme.js';
+import { unlockOnGesture } from './audio.js';
 import { createEqEditor } from './eq-editor.js';
 import { createBackdrop, levelsFromSpectrum } from './backdrop.js';
 
@@ -57,6 +58,10 @@ const savePrefs = () => {
 };
 
 // ---- core objects ------------------------------------------------------------
+
+// Browsers (iOS above all) only allow audio after a tap; unlock it on the first one so
+// sounds started later by the timer (chimes, fades) are allowed too.
+unlockOnGesture();
 
 const noise = new NoisePlayer();
 const chime = new ChimePlayer();

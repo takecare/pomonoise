@@ -5,6 +5,7 @@
 //     -> analyser (for the visualiser) -> volume -> limiter -> speakers
 
 import { BAND_FREQS, PEAK_Q, solveFilterGains, compensationDb } from './eq.js';
+import { getAudioContext } from './audio.js';
 
 const TARGET_RMS = 0.2;
 const LOOP_SECONDS = 12;
@@ -99,7 +100,7 @@ export class NoisePlayer {
 
   #ensureContext() {
     if (this.#ctx) return;
-    const ctx = (this.#ctx = new AudioContext());
+    const ctx = (this.#ctx = getAudioContext());
     this.#filters = BAND_FREQS.map((f) => {
       const filter = ctx.createBiquadFilter();
       filter.type = 'peaking';

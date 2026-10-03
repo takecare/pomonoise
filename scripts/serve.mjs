@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../src/renderer/', import.meta.url));
 const types = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
-  '.svg': 'image/svg+xml', '.png': 'image/png',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.wav': 'audio/wav',
 };
 const port = Number(process.env.PORT) || 5173;
 

@@ -1,6 +1,8 @@
 // Generated chimes: bell-like tones built from a few sine partials with
 // exponentially decaying envelopes. No audio files.
 
+import { getAudioContext } from './audio.js';
+
 const NOTE = { C5: 523.25, E5: 659.25, G5: 783.99, B5: 987.77 };
 
 // Start: a short rising pair ("go"). End: a longer falling triad that settles ("done").
@@ -65,7 +67,7 @@ export class ChimePlayer {
   #ctx = null;
 
   async play(kind) {
-    this.#ctx ??= new AudioContext();
+    this.#ctx ??= getAudioContext();
     await this.#ctx.resume();
     scheduleChime(this.#ctx, this.#ctx.destination, kind);
   }

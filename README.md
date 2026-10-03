@@ -59,12 +59,14 @@ src/
     fade.js           fade-out / fade-in curves (pure, unit-tested)
     theme.js          theme names and applying the data-theme override (pure, unit-tested)
     theme-init.js     tiny pre-paint script so a saved theme override doesn't flash
+    audio.js          the one shared AudioContext + iOS workarounds (unlock on first tap)
     chime.js          chime definitions (pure) + synthesis and player
     eq-editor.js      canvas widget: draggable curve points + live spectrum overlay
     backdrop.js       background visualiser: pure level/smoothing maths + canvas drawing (web only)
     app.js            UI wiring, saved preferences, noise policy, host bridge
     index.html, style.css
     favicon.svg, favicon-32.png, apple-touch-icon.png   site icons (see below)
+    silence.wav       half a second of silence, looped on older iOS (see "Audio on iPhone")
   main/               Electron only
     main.cjs          window, menubar (tray) item, native notifications
     preload.cjs       small IPC bridge exposed to the page as window.pomonoise
@@ -202,6 +204,15 @@ flowchart LR
 - **Live spectrum:** an `AnalyserNode` after the compensation (so the volume slider does not move the picture) is read every frame. `spectrum.js` averages FFT bins over a third of an octave and smooths over time. Absolute FFT levels aren't meaningful, so the measured line is aligned to the curve by average level: you compare shape, not height. It is only drawn while the window is visible.
 
 Measured in Chromium with the real audio graph, the played spectrum follows the target curve of each preset to within about 1 dB (0.2 dB on average) between 50 Hz and 12 kHz.
+
+## Audio on iPhone and iPad
+
+iOS Safari (and every browser on iOS, which all use its engine) is stricter about audio than desktop browsers. `audio.js` handles it:
+
+- **One shared audio context, unlocked on the first tap.** iOS only allows audio to start from a user gesture, and a context created or resumed outside one stays silent. The noise and the chimes therefore share a single context, created and resumed on the first tap or key press (and re-tried on later ones, since iOS can suspend it again, e.g. after a phone call). Sounds started later by the timer, such as the chime at the end of a session, then reuse it.
+- **The silent switch.** Web Audio is muted by the ring/silent switch unless the page declares itself a "playback" audio session. On iOS versions that have `navigator.audioSession` the app sets `audioSession.type = 'playback'`. On older iOS it loops a silent audio file (`silence.wav`), because a playing `<audio>` element un-mutes Web Audio. Other browsers do neither.
+- **Phone speakers.** The default Brown preset puts nearly all its energy below 150 Hz, which a phone speaker can barely reproduce, so it can sound almost silent even when it is playing. Try White or Pink, or headphones.
+- **Background and lock screen.** Do not expect the noise to keep playing with the screen locked or the browser in the background; iOS generally suspends web audio then. This is untested here (there is no iOS device or WebKit in the development environment), so the iOS handling above is based on how iOS is documented to behave and was checked by emulation only.
 
 ## How the background visualiser works
 
